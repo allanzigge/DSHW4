@@ -21,6 +21,7 @@ type RM struct{
 	Leader					string
 	Peers					map[string]rpc.ElectionServiceClient
 	Addr					string
+	leaderIsDead			bool
 	
 	mu 						sync.Mutex
 	
@@ -35,7 +36,8 @@ func main(){
 	rm := &RM{
 		Peers: make(map[string]rpc.ElectionServiceClient),
 		Addr: *AddrFlag,
-		Leader: "localhost:50051",}
+		Leader: "localhost:50051",
+		leaderIsDead: false,}
 	
 	lis, err := net.Listen("tcp", rm.Addr) //Listener på denne addr
 	if err != nil {
@@ -77,18 +79,20 @@ func (rm *RM) Start() {
 	
 	
 	// Run through each of the IPs
-	for  i:= 0; i< hardcodedIPsRing.Len()-1; i++ {
+	for  i:= 0; i< hardcodedIPsRing.Len(); i++ {
 		// Skip the current node
 		if hardcodedIPsRing.Value.(string) == rm.Addr {// If the addr is the addr of the node, save n & nn then break
 			
-			hardcodedIPsRing.Next()
+			hardcodedIPsRing = hardcodedIPsRing.Next()
 			rm.neighbour = hardcodedIPsRing.Value.(string)
 			
-			hardcodedIPsRing.Next() 
+			hardcodedIPsRing = hardcodedIPsRing.Next()
 			rm.nextNeighbour = hardcodedIPsRing.Value.(string)
 			break 
+		} else {
+			hardcodedIPsRing = hardcodedIPsRing.Next()
 		}
-		hardcodedIPsRing.Next()
+		
 	}
 	// go rm.StartListening() //Go routine med kald til "server" funktionaliteten.
 	
@@ -113,20 +117,45 @@ func (rm *RM) SetupClient(addr string) {
 
 func (rm *RM) CheckHeartbeat() {
 	for {
-		if rm.Leader != "" { //If it is known that leader is dead, dont try heartbeats
+		if !rm.leaderIsDead { //If it is known that leader is dead, dont try heartbeats
 			time.Sleep(time.Duration(2) * time.Second)
 			if rm.Leader != rm.Addr { // If i am not the leader
 				_, err := rm.Peers[rm.Leader].Heartbeat(context.Background(), &rpc.Addr{Addr:rm.Addr})
 				if err != nil {
 					log.Printf(rm.neighbour)
+					log.Printf(rm.nextNeighbour)
 					log.Printf("Leader is gone!:", err)
-					stream, err := rm.Peers[rm.neighbour].Election(context.Background())
-						if err != nil {
-							fmt.Println("neighbour was leader, and is dead")
-							stream, _ = rm.Peers[rm.nextNeighbour].Election(context.Background())
+					rm.mu.Lock()
+					rm.leaderIsDead = true //Stop rm from sending heartbeatchecks to leader until new leader is sat
+					rm.mu.Unlock()
+					if rm.neighbour != rm.Leader {
+						stream, err1 := rm.Peers[rm.neighbour].Election(context.Background())
+						if err1 != nil {
+							newstream, err2 := rm.Peers[rm.nextNeighbour].Election(context.Background())
+							if err2 != nil {
+							log.Printf("nextneighbor is gone:", err2)
+							continue
+							}
+						log.Printf("Neighbor is gone:", err1)
+						newstream.Send(&rpc.Addr{Addr: rm.Addr})
+						newstream.CloseSend()
+						continue
 						}
 					stream.Send(&rpc.Addr{Addr: rm.Addr})
+					stream.CloseSend()
 					continue
+					} else {
+						log.Printf("neighbor is leader, trying next leader")
+						stream, err2 := rm.Peers[rm.nextNeighbour].Election(context.Background())
+							if err2 != nil {
+							log.Printf("nextNeighbor is gone:", err2)
+							continue
+							}
+						stream.Send(&rpc.Addr{Addr: rm.Addr})
+						stream.CloseSend()
+					    continue
+					}
+					
 				}
 				fmt.Println("Heartbeat recieved")
 			}
@@ -143,11 +172,17 @@ func (rm *RM) Heartbeat(ctx context.Context, addr *rpc.Addr) (*rpc.Ack, error) {
 
 func (rm *RM) SetLeader(ctx context.Context, LeaderAddr *rpc.Addr) (*rpc.Ack, error){
 	rm.Leader = LeaderAddr.Addr
+	rm.mu.Lock()
+	rm.leaderIsDead = false //Stop rm from sending heartbeatchecks to leader until new leader is sat
+	rm.mu.Unlock()
+	fmt.Println("RM ", rm.Leader , "Is the new Leader")
 	return &rpc.Ack{Status: 200}, nil
 }
 
 func (rm *RM) Election(stream rpc.ElectionService_ElectionServer) error{
-	rm.Leader = "" //Stop rm from sending heartbeatchecks to leader until new leader is sat
+	rm.mu.Lock()
+					rm.leaderIsDead = true //Stop rm from sending heartbeatchecks to leader until new leader is sat
+					rm.mu.Unlock()
 	
 	var partitionAddresses []string
 	
@@ -205,5 +240,6 @@ func (rm *RM) FindNewLeader(partitionAddresses []string) string{
 func (rm *RM) SendPartitionAddresses (stream rpc.ElectionService_ElectionClient, partitionAddresses []string) {
 	for _, partitionAddr := range partitionAddresses{
 		stream.Send(&rpc.Addr{Addr: partitionAddr})
+		stream.CloseSend()
 	}
 }
