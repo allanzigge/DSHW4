@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+option go_package = "auction/proto";
+package proto;
+
+service ElectionService {
+    rpc Election(stream Addr) returns (Ack) {}
+    rpc SetLeader(Addr) returns (Ack) {}
+    rpc Heartbeat(Addr) returns (Ack) {}
+}
+
+service FrontEndService {
+    rpc SetLeader(Addr) returns (Ack) {}
+}
+
+message Addr {
+    string Addr = 1;
+}
+
+message Ack {
+    int64 Status = 1;
+}
