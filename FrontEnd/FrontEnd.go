@@ -56,7 +56,7 @@ func (fe *FE) Bid(ctx context.Context, bidAmount *rpc.Amount) (*rpc.Ack, error) 
 
 func (fe *FE) Result(ctx context.Context, empty *rpc.Empty) (*rpc.BidResult, error) {
 	
-	return &rpc.BidResult{result: "hold kæft"}, nil
+	return &rpc.BidResult{Result: "hold kæft"}, nil
 }
 
 /*

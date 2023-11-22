@@ -104,7 +104,7 @@ func (rm *RM) Start() {
 }
 
 func (rm *RM) connectToFE(){
-	conn, err := grpc.Dial(rm.FEaddr, grpc.WithInsecure()) //Dial op connection to the address
+	_, err := grpc.Dial(rm.FEaddr, grpc.WithInsecure()) //Dial op connection to the address
 	if err != nil {
 		log.Printf("Unable to connect to %s: %v", rm.FEaddr, err)
 		return

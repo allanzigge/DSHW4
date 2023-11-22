@@ -20,11 +20,11 @@ message Addr {
 }
 
 message Amount {
-    int64 amount = 1;
+    int64 Amount = 1;
 }
 
 message BidResult {
-    string result = 1;
+    string Result = 1;
 }
 
 message Empty {}
