@@ -35,7 +35,7 @@ func main() {
 	grpcServer := grpc.NewServer()
 	rpc.RegisterFrontEndServiceServer(grpcServer, fe) //Dette registrerer noden som en værende en TokenRingServiceServer.
 
-
+	go fe.AuctionTimer()
 	// Start listening for incoming connections
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
