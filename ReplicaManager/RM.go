@@ -22,7 +22,7 @@ type RM struct{
 	Peers					map[string]rpc.ElectionServiceClient
 	Addr					string
 	leaderIsDead			bool
-	FEaddr					string
+	FE						rpc.FrontEndServiceClient
 	
 	mu 						sync.Mutex
 	
@@ -38,8 +38,7 @@ func main(){
 		Peers: make(map[string]rpc.ElectionServiceClient),
 		Addr: *AddrFlag,
 		Leader: "localhost:50051",
-		leaderIsDead: false,
-		FEaddr : "localhost50069",}
+		leaderIsDead: false,}
 	
 	lis, err := net.Listen("tcp", rm.Addr) //Listener på denne addr
 	if err != nil {
@@ -69,6 +68,7 @@ func (rm *RM) Start() {
 	hardcodedIPsRing := ring.New(len(hardcodedIPsList))
 
 	rm.connectToFE()
+	
 	
 	// Initialize the ring with some addresses
 	for i := 0; i < len(hardcodedIPsList); i++ {
@@ -104,11 +104,14 @@ func (rm *RM) Start() {
 }
 
 func (rm *RM) connectToFE(){
-	conn, err := grpc.Dial(rm.FEaddr, grpc.WithInsecure()) //Dial op connection to the address
+	log.Println("We here")
+	conn, err := grpc.Dial("localhost:50069", grpc.WithInsecure()) //Dial op connection to the address
 	if err != nil {
-		log.Printf("Unable to connect to %s: %v", rm.FEaddr, err)
-		return
+		log.Printf("Unable to connect to le FrontEnd: %v", err)
+	return
 	}
+	rm.FE = rpc.NewFrontEndServiceClient(conn) //Create a new tokenringclient and map it with its address.
+	log.Println("We in")
 }
 
 func (rm *RM) SetupClient(addr string) {
@@ -220,6 +223,8 @@ func (rm *RM) Election(stream rpc.ElectionService_ElectionServer) error{
 			for _, peers := range rm.Peers{ //Broadcast new leader to all RM
 				peers.SetLeader(context.Background(), &rpc.Addr{Addr: electedAddr})
 			}
+			rm.FE.SetLeader(context.Background(), &rpc.Addr{Addr: electedAddr})
+			//COCK TO THE RING
 			return stream.SendAndClose(&rpc.Ack{
 				Status: 200})
 			}

@@ -24,7 +24,7 @@ message Amount {
 }
 
 message BidResult {
-    string result = 1;
+    string Result = 1;
 }
 
 message Empty {}
