@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"net"
-	"time"
 
 	rpc "auction.com/proto"
 	"golang.org/x/net/context"
@@ -33,13 +32,6 @@ func main() {
 	grpcServer := grpc.NewServer()
 	rpc.RegisterFrontEndServiceServer(grpcServer, fe) //Dette registrerer noden som en værende en TokenRingServiceServer.
 
-	go func() {
-		for {
-			time.Sleep(time.Duration(2) * time.Second)
-			log.Println("bid is made to", fe.Leader)
-			fe.LeaderConnection.Bid(context.Background(), &rpc.Amount{Amount: 32});
-		}
-	}()
 
 	// Start listening for incoming connections
 	if err := grpcServer.Serve(lis); err != nil {
@@ -61,7 +53,11 @@ func (fe *FE) SetLeader(ctx context.Context, LeaderAddr *rpc.Addr) (*rpc.Ack, er
 // rpc Result(Empty) returns (result) {}
 
 func (fe *FE) Bid(ctx context.Context, bidAmount *rpc.Amount) (*rpc.Ack, error) {
-	
+	_, err := fe.LeaderConnection.Bid(context.Background(), &rpc.Amount{Amount: bidAmount.Amount})
+	if err != nil {
+		log.Println("Error calling Bid on leader: ", err)
+		return &rpc.Ack{Status: 400}, err
+	}
 	return &rpc.Ack{Status: 200}, nil
 }
 
