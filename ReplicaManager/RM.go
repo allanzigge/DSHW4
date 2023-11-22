@@ -22,6 +22,7 @@ type RM struct{
 	Peers					map[string]rpc.ElectionServiceClient
 	Addr					string
 	leaderIsDead			bool
+	FEaddr					string
 	
 	mu 						sync.Mutex
 	
@@ -37,12 +38,14 @@ func main(){
 		Peers: make(map[string]rpc.ElectionServiceClient),
 		Addr: *AddrFlag,
 		Leader: "localhost:50051",
-		leaderIsDead: false,}
+		leaderIsDead: false,
+		FEaddr : "localhost50069",}
 	
 	lis, err := net.Listen("tcp", rm.Addr) //Listener på denne addr
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+	
 	
 	rm.Start()
 	
@@ -60,10 +63,12 @@ func main(){
 func (rm *RM) Start() {
 	// rm.Peers = make(map[string]rpc.ElectionServiceClient) //Instantierer nodens map over peers.
 	
-	// //Hardcoded list af replica manager
+	// Hardcoded list af replica manager
 	hardcodedIPsList :=  []string{"localhost:50051", "localhost:50052", "localhost:50053"}
 	// Manke a new ring
 	hardcodedIPsRing := ring.New(len(hardcodedIPsList))
+
+	rm.connectToFE()
 	
 	// Initialize the ring with some addresses
 	for i := 0; i < len(hardcodedIPsList); i++ {
@@ -96,6 +101,14 @@ func (rm *RM) Start() {
 	}
 	// go rm.StartListening() //Go routine med kald til "server" funktionaliteten.
 	
+}
+
+func (rm *RM) connectToFE(){
+	conn, err := grpc.Dial(rm.FEaddr, grpc.WithInsecure()) //Dial op connection to the address
+	if err != nil {
+		log.Printf("Unable to connect to %s: %v", rm.FEaddr, err)
+		return
+	}
 }
 
 func (rm *RM) SetupClient(addr string) {

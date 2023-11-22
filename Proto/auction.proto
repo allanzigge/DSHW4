@@ -11,11 +11,23 @@ service ElectionService {
 
 service FrontEndService {
     rpc SetLeader(Addr) returns (Ack) {}
+    rpc Bid(Amount) returns (Ack) {}
+    rpc Result(Empty) returns (BidResult) {}
 }
 
 message Addr {
     string Addr = 1;
 }
+
+message Amount {
+    int64 amount = 1;
+}
+
+message BidResult {
+    string result = 1;
+}
+
+message Empty {}
 
 message Ack {
     int64 Status = 1;
