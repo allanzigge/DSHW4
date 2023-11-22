@@ -27,6 +27,8 @@ type RM struct{
 	mu 						sync.Mutex
 	
 	rpc.UnimplementedElectionServiceServer
+	rpc.UnimplementedFrontEndServiceServer
+
 }
 
 var AddrFlag = flag.String("addr", "default", "RM IP address")

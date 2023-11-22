@@ -11,7 +11,8 @@ import (
 )
 
 type FE struct {
-	Leader string
+	Leader 					string
+	LeaderConnection		rpc.FrontEndServiceClient
 	//ReqQueue				[]
 
 	rpc.UnimplementedFrontEndServiceServer
@@ -20,7 +21,9 @@ type FE struct {
 func main() {
 	fe := &FE{
 		Leader: "localhost:50051",
+		LeaderConnection: nil,
 	}
+	fe.SetupServer(fe.Leader)
 
 	lis, err := net.Listen("tcp", "localhost:50069") //Listener på denne addr
 	if err != nil {
@@ -49,6 +52,7 @@ func main() {
 
 func (fe *FE) SetLeader(ctx context.Context, LeaderAddr *rpc.Addr) (*rpc.Ack, error) {
 	fe.Leader = LeaderAddr.Addr
+	fe.SetupServer(LeaderAddr.Addr)
 	return &rpc.Ack{Status: 200}, nil
 }
 
@@ -65,10 +69,14 @@ func (fe *FE) Result(ctx context.Context, empty *rpc.Empty) (*rpc.BidResult, err
 	return &rpc.BidResult{Result: "hold kæft"}, nil
 }
 
-/*
-func (fe *FE) SetupClient(addr string) {
-	if addr == fe.Addr {
+
+func (fe *FE) SetupServer(addr string) {
+	conn, err := grpc.Dial(addr, grpc.WithInsecure())
+	if err != nil {
+		log.Println("Unable to connect to server: %s", addr)
 		return
 	}
+	fe.LeaderConnection = rpc.NewFrontEndServiceClient(conn)
+	log.Println("Frontend has connected to leader %s", addr)
 }
-*/
+
