@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -15,9 +16,12 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+var ClientIdFlag = flag.String("id", "default", "Client id")
+
 var server rpc.FrontEndServiceClient
 
 func main() {
+	flag.Parse()
 	ConnectToServer()
 
 	go CheckForCommands()
@@ -55,16 +59,18 @@ func runBid() {
 		return
 	}
 
-	_, err2 := server.Bid(context.Background(), &rpc.Amount{Amount: bidAmount})
+	Outcome, err2 := server.Bid(context.Background(), &rpc.Amount{Amount: bidAmount, Id: *ClientIdFlag})
 	if err2 != nil {
 		log.Println("Error calling Bid on frontend: ", err2)
 		return
 	}
+	log.Println(Outcome.Outcome)
 
 }
 
 func runResult() {
-
+	bidResult, _ := server.Result(context.Background(), &rpc.Empty{})
+	log.Println(bidResult)
 }
 
 func ConnectToServer(){
