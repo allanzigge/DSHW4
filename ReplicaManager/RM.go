@@ -79,7 +79,7 @@ func (rm *RM) Start() {
 	
 	
 	// Run through each of the IPs
-	for  i:= 0; i< hardcodedIPsRing.Len(); i++ {
+	for  i:= 0; i < (2*hardcodedIPsRing.Len()); i++ {
 		// Skip the current node
 		if hardcodedIPsRing.Value.(string) == rm.Addr {// If the addr is the addr of the node, save n & nn then break
 			
@@ -124,11 +124,13 @@ func (rm *RM) CheckHeartbeat() {
 				if err != nil {
 					log.Printf(rm.neighbour)
 					log.Printf(rm.nextNeighbour)
+					log.Printf(rm.Leader)
 					log.Printf("Leader is gone!:", err)
 					rm.mu.Lock()
 					rm.leaderIsDead = true //Stop rm from sending heartbeatchecks to leader until new leader is sat
 					rm.mu.Unlock()
 					if rm.neighbour != rm.Leader {
+						
 						stream, err1 := rm.Peers[rm.neighbour].Election(context.Background())
 						if err1 != nil {
 							newstream, err2 := rm.Peers[rm.nextNeighbour].Election(context.Background())
@@ -200,6 +202,8 @@ func (rm *RM) Election(stream rpc.ElectionService_ElectionServer) error{
 	for _, partitionAddr := range partitionAddresses{ 
 		if partitionAddr == rm.Addr{ //If my adress is in the list -> End election & find result
 			electedAddr := rm.FindNewLeader(partitionAddresses)
+			rm.Leader = electedAddr;
+			rm.leaderIsDead = false;
 			for _, peers := range rm.Peers{ //Broadcast new leader to all RM
 				peers.SetLeader(context.Background(), &rpc.Addr{Addr: electedAddr})
 			}
@@ -240,6 +244,6 @@ func (rm *RM) FindNewLeader(partitionAddresses []string) string{
 func (rm *RM) SendPartitionAddresses (stream rpc.ElectionService_ElectionClient, partitionAddresses []string) {
 	for _, partitionAddr := range partitionAddresses{
 		stream.Send(&rpc.Addr{Addr: partitionAddr})
-		stream.CloseSend()
 	}
+	stream.CloseSend()
 }
