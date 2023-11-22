@@ -36,7 +36,8 @@ func main() {
 	go func() {
 		for {
 			time.Sleep(time.Duration(2) * time.Second)
-			log.Println("leader ", fe.Leader)
+			log.Println("bid is made to", fe.Leader)
+			fe.LeaderConnection.Bid(context.Background(), &rpc.Amount{Amount: 32});
 		}
 	}()
 
@@ -73,10 +74,10 @@ func (fe *FE) Result(ctx context.Context, empty *rpc.Empty) (*rpc.BidResult, err
 func (fe *FE) SetupServer(addr string) {
 	conn, err := grpc.Dial(addr, grpc.WithInsecure())
 	if err != nil {
-		log.Println("Unable to connect to server: %s", addr)
+		log.Println("Unable to connect to server: ", addr)
 		return
 	}
 	fe.LeaderConnection = rpc.NewFrontEndServiceClient(conn)
-	log.Println("Frontend has connected to leader %s", addr)
+	log.Println("Frontend has connected to leader ", addr)
 }
 

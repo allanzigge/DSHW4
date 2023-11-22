@@ -26,9 +26,8 @@ type RM struct{
 	
 	mu 						sync.Mutex
 	
-	rpc.UnimplementedElectionServiceServer
 	rpc.UnimplementedFrontEndServiceServer
-
+	rpc.UnimplementedElectionServiceServer
 }
 
 var AddrFlag = flag.String("addr", "default", "RM IP address")
@@ -47,16 +46,33 @@ func main(){
 		log.Fatalf("failed to listen: %v", err)
 	}
 	
-	
 	rm.Start()
+
+	go rm.SetupGrpcRMServer(lis)
+
+	go rm.SetupGrpcFEServer(lis)
 	
-	go rm.CheckHeartbeat() // start listning to the 
+	go rm.CheckHeartbeat() // start listning to the Leader
 	
+	select{}
+}
+
+func (rm *RM) SetupGrpcFEServer(lis net.Listener){
 	grpcServer := grpc.NewServer()
-	rpc.RegisterElectionServiceServer(grpcServer, rm) //Dette registrerer noden som en værende en TokenRingServiceServer.
-	
+	rpc.RegisterElectionServiceServer(grpcServer, rm) //This registres the Node as a Server to the FE.
+
 	// Start listening for incoming connections
 	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
+}
+
+func (rm *RM) SetupGrpcRMServer(lis net.Listener){
+	grpcRMServer := grpc.NewServer()
+	rpc.RegisterFrontEndServiceServer(grpcRMServer, rm) //This registres the Node as a ReplicaManager.
+
+	// Start listening for incoming connections
+	if err := grpcRMServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
 }
@@ -112,7 +128,7 @@ func (rm *RM) connectToFE(){
 		log.Printf("Unable to connect to le FrontEnd: %v", err)
 	return
 	}
-	rm.FE = rpc.NewFrontEndServiceClient(conn) //Create a new tokenringclient and map it with its address.
+	rm.FE = rpc.NewFrontEndServiceClient(conn)
 	log.Println("We in")
 }
 
@@ -151,12 +167,12 @@ func (rm *RM) CheckHeartbeat() {
 						
 						stream, err1 := rm.Peers[rm.neighbour].Election(context.Background())
 						if err1 != nil {
+						log.Printf("Neighbor is gone:", err1)
 							newstream, err2 := rm.Peers[rm.nextNeighbour].Election(context.Background())
 							if err2 != nil {
 							log.Printf("nextneighbor is gone:", err2)
 							continue
 							}
-						log.Printf("Neighbor is gone:", err1)
 						newstream.Send(&rpc.Addr{Addr: rm.Addr})
 						newstream.CloseSend()
 						continue
@@ -165,7 +181,7 @@ func (rm *RM) CheckHeartbeat() {
 					stream.CloseSend()
 					continue
 					} else {
-						log.Printf("neighbor is leader, trying next leader")
+						log.Printf("l. 184: neighbor is leader, trying next neighbour")
 						stream, err2 := rm.Peers[rm.nextNeighbour].Election(context.Background())
 							if err2 != nil {
 							log.Printf("nextNeighbor is gone:", err2)
@@ -226,20 +242,21 @@ func (rm *RM) Election(stream rpc.ElectionService_ElectionServer) error{
 				peers.SetLeader(context.Background(), &rpc.Addr{Addr: electedAddr})
 			}
 			rm.FE.SetLeader(context.Background(), &rpc.Addr{Addr: electedAddr})
-			//COCK TO THE RING
 			return stream.SendAndClose(&rpc.Ack{
 				Status: 200})
 			}
 		}
 		
 	partitionAddresses = append(partitionAddresses, rm.Addr)
-	
+	for _, seje := range partitionAddresses{
+		log.Println(seje)
+	}
 	newStream, err := rm.Peers[rm.neighbour].Election(context.Background())
 	if err != nil {
-		fmt.Println(err); //Nieghbour er død
+		fmt.Println("l. 254: ", err); //Nieghbour er død
 		newNewStream, err := rm.Peers[rm.nextNeighbour].Election(context.Background())
 		if err != nil {
-			fmt.Println(err); //NextNeighbour er død.. Big slick lick fuck lort problem
+			fmt.Println("l. 257: ",err); //NextNeighbour er død..
 		} else {
 			rm.SendPartitionAddresses(newNewStream, partitionAddresses)
 		}
@@ -266,4 +283,9 @@ func (rm *RM) SendPartitionAddresses (stream rpc.ElectionService_ElectionClient,
 		stream.Send(&rpc.Addr{Addr: partitionAddr})
 	}
 	stream.CloseSend()
+}
+
+func (rm *RM) Bid(ctx context.Context, bidAmount *rpc.Amount) (*rpc.Ack, error) {
+	log.Println(bidAmount.Amount)
+	return &rpc.Ack{Status: 200}, nil
 }
