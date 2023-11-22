@@ -48,28 +48,20 @@ func main(){
 	
 	rm.Start()
 
-	go rm.SetupGrpcRMServer(lis)
+	go rm.SetupServer(lis)
 
-	go rm.SetupGrpcFEServer(lis)
+	// go rm.SetupGrpcFEServer(lis)
 	
 	go rm.CheckHeartbeat() // start listning to the Leader
 	
 	select{}
 }
 
-func (rm *RM) SetupGrpcFEServer(lis net.Listener){
-	grpcServer := grpc.NewServer()
-	rpc.RegisterElectionServiceServer(grpcServer, rm) //This registres the Node as a Server to the FE.
 
-	// Start listening for incoming connections
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
-}
-
-func (rm *RM) SetupGrpcRMServer(lis net.Listener){
+func (rm *RM) SetupServer(lis net.Listener){
 	grpcRMServer := grpc.NewServer()
-	rpc.RegisterFrontEndServiceServer(grpcRMServer, rm) //This registres the Node as a ReplicaManager.
+	rpc.RegisterElectionServiceServer(grpcRMServer, rm) //This registres the Node as a ReplicaManager.
+	rpc.RegisterFrontEndServiceServer(grpcRMServer, rm)
 
 	// Start listening for incoming connections
 	if err := grpcRMServer.Serve(lis); err != nil {
@@ -216,6 +208,7 @@ func (rm *RM) SetLeader(ctx context.Context, LeaderAddr *rpc.Addr) (*rpc.Ack, er
 }
 
 func (rm *RM) Election(stream rpc.ElectionService_ElectionServer) error{
+	log.Println("Jeg er i electionmode",rm.Addr)
 	rm.mu.Lock()
 					rm.leaderIsDead = true //Stop rm from sending heartbeatchecks to leader until new leader is sat
 					rm.mu.Unlock()
