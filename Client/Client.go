@@ -22,6 +22,16 @@ var server rpc.FrontEndServiceClient
 
 func main() {
 	flag.Parse()
+
+	file, err := os.OpenFile("../log_file.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	// Set log output to the file
+	log.SetOutput(file)
+
 	ConnectToServer()
 
 	go CheckForCommands()
@@ -55,22 +65,24 @@ func runBid() {
 
 	bidAmount,err1 := strconv.ParseInt(bid, 10, 64)
 	if err1 != nil {
-		log.Println("only ints!")
+		fmt.Println("only ints!")
 		return
 	}
+
+	log.Println("Client", *ClientIdFlag, "tries to bid: ", bidAmount)
 
 	Outcome, err2 := server.Bid(context.Background(), &rpc.Amount{Amount: bidAmount, Id: *ClientIdFlag})
 	if err2 != nil {
 		log.Println("Error calling Bid on frontend: ", err2)
 		return
 	}
-	log.Println(Outcome.Outcome)
+	log.Println("Client", *ClientIdFlag , ":" ,Outcome.Outcome)
 
 }
 
 func runResult() {
 	bidResult, _ := server.Result(context.Background(), &rpc.Empty{})
-	log.Println(bidResult)
+	log.Println("Client", *ClientIdFlag, ":", bidResult)
 }
 
 func ConnectToServer(){
@@ -83,7 +95,7 @@ func ConnectToServer(){
 		log.Println("Fail to dial: %v", err)
 		return
 	}
-	log.Println("Connection established to FrontEnd")
+	log.Println("Client",*ClientIdFlag ,": Connection established to FrontEnd")
 
 	server = rpc.NewFrontEndServiceClient(conn)
 

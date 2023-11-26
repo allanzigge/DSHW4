@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"time"
+	"os"
 
 	rpc "auction.com/proto"
 	"golang.org/x/net/context"
@@ -25,6 +26,16 @@ func main() {
 		LeaderConnection: nil,
 		auctionActive: true,
 	}
+
+	file, err := os.OpenFile("../log_file.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	// Set log output to the file
+	log.SetOutput(file)
+
 	fe.SetupServer(fe.Leader)
 
 	lis, err := net.Listen("tcp", "localhost:50069") //Listener på denne addr
@@ -57,7 +68,7 @@ func (fe *FE) SetLeader(ctx context.Context, LeaderAddr *rpc.Addr) (*rpc.Ack, er
 
 func (fe *FE) Bid(ctx context.Context, bidAmount *rpc.Amount) (*rpc.Outcome, error) {
 	if fe.auctionActive{
-		Outcome, err := fe.LeaderConnection.Bid(context.Background(), &rpc.Amount{Amount: bidAmount.Amount})
+		Outcome, err := fe.LeaderConnection.Bid(context.Background(), &rpc.Amount{Amount: bidAmount.Amount, Id: bidAmount.Id})
 		if err != nil {
 			log.Println("Error calling Bid on leader: ", err)
 			return &rpc.Outcome{Outcome: "Exception"}, err
@@ -74,9 +85,9 @@ func (fe *FE) Result(ctx context.Context, empty *rpc.Empty) (*rpc.BidResult, err
 		log.Println("error calling result on leader: ", err)
 	}
 	if fe.auctionActive {
-		return &rpc.BidResult{Result: "Highest bidder: " + results.Result}, nil
+		return &rpc.BidResult{Result: " Highest bidder: " + results.Result}, nil
 	} else {
-		return &rpc.BidResult{Result: "Auction is over! \n" + "Winner is :" + results.Result}, nil
+		return &rpc.BidResult{Result: " Auction is over! Winner is" + results.Result}, nil
 	}
 	
 }
@@ -93,7 +104,7 @@ func (fe *FE) SetupServer(addr string) {
 }
 
 func (fe *FE) AuctionTimer() {
-	time.Sleep(time.Second*30)
+	time.Sleep(time.Second*120)
 	fe.auctionActive = false;
 }
 
