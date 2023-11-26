@@ -13,6 +13,7 @@ import (
 type FE struct {
 	Leader 					string
 	LeaderConnection		rpc.FrontEndServiceClient
+	auctionActive			bool
 	//ReqQueue				[]
 
 	rpc.UnimplementedFrontEndServiceServer
@@ -22,6 +23,7 @@ func main() {
 	fe := &FE{
 		Leader: "localhost:50051",
 		LeaderConnection: nil,
+		auctionActive: true,
 	}
 	fe.SetupServer(fe.Leader)
 
@@ -33,13 +35,7 @@ func main() {
 	grpcServer := grpc.NewServer()
 	rpc.RegisterFrontEndServiceServer(grpcServer, fe) //Dette registrerer noden som en værende en TokenRingServiceServer.
 
-	go func() {
-		for {
-			time.Sleep(time.Duration(2) * time.Second)
-			log.Println("leader ", fe.Leader)
-		}
-	}()
-
+	go fe.AuctionTimer()
 	// Start listening for incoming connections
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
@@ -59,24 +55,45 @@ func (fe *FE) SetLeader(ctx context.Context, LeaderAddr *rpc.Addr) (*rpc.Ack, er
 //rpc Bid(amount) returns (Ack) {}
 // rpc Result(Empty) returns (result) {}
 
-func (fe *FE) Bid(ctx context.Context, bidAmount *rpc.Amount) (*rpc.Ack, error) {
-	
-	return &rpc.Ack{Status: 200}, nil
+func (fe *FE) Bid(ctx context.Context, bidAmount *rpc.Amount) (*rpc.Outcome, error) {
+	if fe.auctionActive{
+		Outcome, err := fe.LeaderConnection.Bid(context.Background(), &rpc.Amount{Amount: bidAmount.Amount})
+		if err != nil {
+			log.Println("Error calling Bid on leader: ", err)
+			return &rpc.Outcome{Outcome: "Exception"}, err
+		}
+		return Outcome, nil
+	} else {
+		return &rpc.Outcome{Outcome: "Exception: Auction FINISHED"}, nil
+	}
 }
 
 func (fe *FE) Result(ctx context.Context, empty *rpc.Empty) (*rpc.BidResult, error) {
+	results, err := fe.LeaderConnection.Result(context.Background(), &rpc.Empty{})
+	if err != nil {
+		log.Println("error calling result on leader: ", err)
+	}
+	if fe.auctionActive {
+		return &rpc.BidResult{Result: "Highest bidder: " + results.Result}, nil
+	} else {
+		return &rpc.BidResult{Result: "Auction is over! \n" + "Winner is :" + results.Result}, nil
+	}
 	
-	return &rpc.BidResult{Result: "hold kæft"}, nil
 }
 
 
 func (fe *FE) SetupServer(addr string) {
 	conn, err := grpc.Dial(addr, grpc.WithInsecure())
 	if err != nil {
-		log.Println("Unable to connect to server: %s", addr)
+		log.Println("Unable to connect to server: ", addr)
 		return
 	}
 	fe.LeaderConnection = rpc.NewFrontEndServiceClient(conn)
-	log.Println("Frontend has connected to leader %s", addr)
+	log.Println("Frontend has connected to leader ", addr)
+}
+
+func (fe *FE) AuctionTimer() {
+	time.Sleep(time.Second*30)
+	fe.auctionActive = false;
 }
 

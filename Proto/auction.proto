@@ -11,7 +11,7 @@ service ElectionService {
 
 service FrontEndService {
     rpc SetLeader(Addr) returns (Ack) {}
-    rpc Bid(Amount) returns (Ack) {}
+    rpc Bid(Amount) returns (Outcome) {}
     rpc Result(Empty) returns (BidResult) {}
 }
 
@@ -19,13 +19,19 @@ message Addr {
     string Addr = 1;
 }
 
+message Outcome {
+    string outcome = 1;
+}
+
 message Amount {
-    int64 amount = 1;
+    int64 Amount = 1;
+    string Id = 2;
 }
 
 message BidResult {
-    string Result = 1;
+    string result = 1;
 }
+
 
 message Empty {}
 
