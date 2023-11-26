@@ -3,13 +3,13 @@ package main
 import (
 	"container/ring"
 	"flag"
-	"fmt"
 	"io"
 	"log"
 	"net"
 	"strconv"
 	"sync"
 	"time"
+	"os"
 
 	rpc "auction.com/proto"
 	"golang.org/x/net/context"
@@ -39,6 +39,15 @@ var AddrFlag = flag.String("addr", "default", "RM IP address")
 
 func main(){
 	flag.Parse()
+
+	file, err := os.OpenFile("../log_file.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	// Set log output to the file
+	log.SetOutput(file)
 	
 	rm := &RM{
 		electionPeers: make(map[string]rpc.ElectionServiceClient),
@@ -129,7 +138,7 @@ func (rm *RM) Start() {
 func (rm *RM) connectToFE(){
 	conn, err := grpc.Dial("localhost:50069", grpc.WithInsecure()) //Dial op connection to the address
 	if err != nil {
-		log.Printf("Unable to connect to le FrontEnd: %v", err)
+		log.Printf(rm.Addr, ": Unable to connect to le FrontEnd: %v", err)
 	return
 	}
 	rm.FE = rpc.NewFrontEndServiceClient(conn)
@@ -142,14 +151,14 @@ func (rm *RM) SetupClient(addr string) {
 	
 	conn, err := grpc.Dial(addr, grpc.WithInsecure()) //Dial op connection to the address
 	if err != nil {
-		log.Printf("Unable to connect to %s: %v", addr, err)
+		log.Printf(rm.Addr, ": Unable to connect to %s: %v", addr, err)
 		return
 	}
 	
 	rm.mu.Lock()
 	rm.electionPeers[addr] = rpc.NewElectionServiceClient(conn) //Create a new tokenringclient and map it with its address.
 	rm.frontEndPeers[addr] = rpc.NewFrontEndServiceClient(conn) 
-	fmt.Println("RM(", rm.Addr ,") has connected to Node(",addr, ")") //Print that the connection happened.
+	log.Println("RM(", rm.Addr ,") has connected to Node(",addr, ")") //Print that the connection happened.
 	rm.mu.Unlock()
 }
 
@@ -160,10 +169,7 @@ func (rm *RM) CheckHeartbeat() {
 			if rm.Leader != rm.Addr { // If i am not the leader
 				_, err := rm.electionPeers[rm.Leader].Heartbeat(context.Background(), &rpc.Addr{Addr:rm.Addr})
 				if err != nil {
-					log.Printf(rm.neighbour)
-					log.Printf(rm.nextNeighbour)
-					log.Printf(rm.Leader)
-					log.Printf("Leader is gone!:", err)
+					log.Printf(rm.Addr, ":Leader is gone!: ", err)
 					rm.mu.Lock()
 					rm.leaderIsDead = true //Stop rm from sending heartbeatchecks to leader until new leader is sat
 					rm.mu.Unlock()
@@ -171,10 +177,10 @@ func (rm *RM) CheckHeartbeat() {
 						
 						stream, err1 := rm.electionPeers[rm.neighbour].Election(context.Background())
 						if err1 != nil {
-						log.Printf("Neighbor is gone:", err1)
+						log.Printf(rm.Addr, ":Neighbor is gone:", err1)
 							newstream, err2 := rm.electionPeers[rm.nextNeighbour].Election(context.Background())
 							if err2 != nil {
-							log.Printf("nextneighbor is gone:", err2)
+							log.Printf(rm.Addr, ":nextneighbor is gone:", err2)
 							continue
 							}
 						newstream.Send(&rpc.Addr{Addr: rm.Addr})
@@ -185,10 +191,10 @@ func (rm *RM) CheckHeartbeat() {
 					stream.CloseSend()
 					continue
 					} else {
-						log.Printf("l. 184: neighbor is leader, trying next neighbour")
+						log.Printf(rm.Addr, ": neighbor is leader, trying next neighbour")
 						stream, err2 := rm.electionPeers[rm.nextNeighbour].Election(context.Background())
 							if err2 != nil {
-							log.Printf("nextNeighbor is gone:", err2)
+							log.Printf(rm.Addr, ":nextNeighbor is gone:", err2)
 							continue
 							}
 						stream.Send(&rpc.Addr{Addr: rm.Addr})
@@ -218,7 +224,7 @@ func (rm *RM) SetLeader(ctx context.Context, LeaderAddr *rpc.Addr) (*rpc.Ack, er
 	rm.mu.Lock()
 	rm.leaderIsDead = false //Stop rm from sending heartbeatchecks to leader until new leader is sat
 	rm.mu.Unlock()
-	fmt.Println("RM ", rm.Leader , "Is the new Leader")
+	log.Println(rm.Addr, ": RM ", rm.Leader , "Is the new Leader")
 	return &rpc.Ack{Status: 200}, nil
 }
 
@@ -260,15 +266,12 @@ func (rm *RM) Election(stream rpc.ElectionService_ElectionServer) error{
 		}
 		
 	partitionAddresses = append(partitionAddresses, rm.Addr)
-	for _, seje := range partitionAddresses{
-		log.Println(seje)
-	}
 	newStream, err := rm.electionPeers[rm.neighbour].Election(context.Background())
 	if err != nil {
-		fmt.Println("l. 254: ", err); //Nieghbour er død
+		log.Println(rm.Addr, ": My nieghbor is gone"); //Nieghbour er død
 		newNewStream, err := rm.electionPeers[rm.nextNeighbour].Election(context.Background())
 		if err != nil {
-			fmt.Println("l. 257: ",err); //NextNeighbour er død..
+			log.Println(rm.Addr, ": my nextNeighbor is gone"); //NextNeighbour er død..
 		} else {
 			rm.SendPartitionAddresses(newNewStream, partitionAddresses)
 		}
@@ -302,17 +305,17 @@ func (rm *RM) Bid(ctx context.Context, bidAmount *rpc.Amount) (*rpc.Outcome, err
 		for _, peer := range rm.frontEndPeers {
 			_, err := peer.Bid(context.Background(), bidAmount)
 			if err != nil {
-				log.Println("Error calling bid on peers: ", err)
+				log.Println(rm.Addr, ": Error calling bid on peer: ", peer)
 				continue
 			}
 		}
 	}
-	log.Println(bidAmount.Amount)
+	log.Println(rm.Addr, ": set new highest bid to: ", bidAmount.Amount)
 	return rm.compareBids(bidAmount), nil
 }
 
 func (rm *RM) Result(ctx context.Context, empty *rpc.Empty) (*rpc.BidResult, error) {
-	return &rpc.BidResult{Result: "Client: " + rm.highestBid.Id + " with amount: " + strconv.FormatInt(rm.highestBid.Amount, 10)}, nil
+	return &rpc.BidResult{Result: "Client " + rm.highestBid.Id + " with amount: " + strconv.FormatInt(rm.highestBid.Amount, 10)}, nil
 }
 
 func (rm *RM) compareBids(newBid *rpc.Amount) *rpc.Outcome {
