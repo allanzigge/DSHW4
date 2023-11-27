@@ -301,6 +301,8 @@ func (rm *RM) SendPartitionAddresses (stream rpc.ElectionService_ElectionClient,
 }
 
 func (rm *RM) Bid(ctx context.Context, bidAmount *rpc.Amount) (*rpc.Outcome, error) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
 	if rm.isLeader {
 		for _, peer := range rm.frontEndPeers {
 			_, err := peer.Bid(context.Background(), bidAmount)

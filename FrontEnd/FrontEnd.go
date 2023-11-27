@@ -66,28 +66,50 @@ func (fe *FE) SetLeader(ctx context.Context, LeaderAddr *rpc.Addr) (*rpc.Ack, er
 //rpc Bid(amount) returns (Ack) {}
 // rpc Result(Empty) returns (result) {}
 
+
+
 func (fe *FE) Bid(ctx context.Context, bidAmount *rpc.Amount) (*rpc.Outcome, error) {
-	if fe.auctionActive{
-		Outcome, err := fe.LeaderConnection.Bid(context.Background(), &rpc.Amount{Amount: bidAmount.Amount, Id: bidAmount.Id})
-		if err != nil {
-			log.Println("Error calling Bid on leader: ", err)
-			return &rpc.Outcome{Outcome: "Exception"}, err
+	tryCounter := 0;
+	for {
+		tryCounter  = tryCounter +1
+		if fe.auctionActive{
+			Outcome, err := fe.LeaderConnection.Bid(context.Background(), &rpc.Amount{Amount: bidAmount.Amount, Id: bidAmount.Id})
+			if err != nil {
+				if tryCounter == 30 {
+					log.Println("Error calling Bid on leader: ", err)
+					return &rpc.Outcome{Outcome: "Exception"}, err
+				} else {
+					time.Sleep(1 * time.Second)
+					continue
+				}
+			}
+			return Outcome, nil
+		} else {
+			return &rpc.Outcome{Outcome: "Exception: Auction FINISHED"}, nil
 		}
-		return Outcome, nil
-	} else {
-		return &rpc.Outcome{Outcome: "Exception: Auction FINISHED"}, nil
 	}
 }
 
 func (fe *FE) Result(ctx context.Context, empty *rpc.Empty) (*rpc.BidResult, error) {
-	results, err := fe.LeaderConnection.Result(context.Background(), &rpc.Empty{})
-	if err != nil {
-		log.Println("error calling result on leader: ", err)
-	}
-	if fe.auctionActive {
-		return &rpc.BidResult{Result: " Highest bidder: " + results.Result}, nil
-	} else {
-		return &rpc.BidResult{Result: " Auction is over! Winner is" + results.Result}, nil
+	tryCounter := 0
+	for {
+		tryCounter = tryCounter + 1
+		results, err := fe.LeaderConnection.Result(context.Background(), &rpc.Empty{})
+		if err != nil {
+			if tryCounter == 30 {
+				log.Println("error calling result on leader: ", err)
+				return nil , err
+			} else {
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			
+		}
+		if fe.auctionActive {
+			return &rpc.BidResult{Result: " Highest bidder: " + results.Result}, nil
+		} else {
+			return &rpc.BidResult{Result: " Auction is over! Winner is" + results.Result}, nil
+		}
 	}
 	
 }
